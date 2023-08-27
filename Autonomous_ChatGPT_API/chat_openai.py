@@ -2,16 +2,13 @@ import openai
 import pandas as pd
 
 
+openai.api_base = "https://hackathon.meridian.today/v1"
+openai.api_key = "sk-xxx"
 
 
-openai.api_key = ""
+def csv_prompter(question, csv_name):
 
-
-
-
-def csv_prompter(question,csv_name):
-
-
+    # 1. 关键字挖掘
     fulltext = "A question is provided below. Given the question, extract " + \
                "keywords from the text. Focus on extracting the keywords that we can use " + \
                "to best lookup answers to the question. \n" + \
@@ -32,31 +29,35 @@ def csv_prompter(question,csv_name):
     )
     keyword_list = rsp.get("choices")[0]["message"]["content"]
     keyword_list = keyword_list.split(", ")
+    # ['frontal headache', 'fever', 'painful sinuses', 'disease', 'medical test']
 
     print(keyword_list)
     df = pd.read_csv(csv_name)
     divided_text = []
     csvdata = df.to_dict('records')
-    step_length = 15
-    for csv_item in range(0,len(csvdata),step_length):
-        csv_text = str(csvdata[csv_item:csv_item+step_length]).replace("}, {", "\n\n").replace("\"", "")#.replace("[", "").replace("]", "")
+    step_length = 15  # step_length 一组
+    for csv_item in range(0, len(csvdata), step_length):
+        csv_text = str(csvdata[csv_item: csv_item + step_length]).replace("}, {", "\n\n").replace("\"", "")#.replace("[", "").replace("]", "")
         divided_text.append(csv_text)
 
     answer_llm = ""
 
     score_textlist = [0] * len(divided_text)
 
+    # 每组内出现关键词的次数为分数 score
     for i, chunk in enumerate(divided_text):
         for t, keyw in enumerate(keyword_list):
             if keyw.lower() in chunk.lower():
                 score_textlist[i] = score_textlist[i] + 1
 
+    # 2. score 前 5 组每组提取最相关的病例
     answer_list = []
     divided_text = [item for _, item in sorted(zip(score_textlist, divided_text), reverse=True)]
 
     for i, chunk in enumerate(divided_text):
 
-        if i>5:
+        # 只取前5组
+        if i > 5:
             continue
 
         fulltext = "{}".format(chunk) + \
@@ -83,7 +84,7 @@ def csv_prompter(question,csv_name):
             answer_list.append(answer_llm)
 
 
-
+    # 基于 5 组最相关的病例来回答问题
     fulltext = "The original question is as follows: {}\n".format(question) + \
                "Based on this Table:\n" + \
                "------------\n" + \
@@ -112,5 +113,5 @@ def csv_prompter(question,csv_name):
 
 question = "If I have frontal headache, fever, and painful sinuses, what disease should I have, and what medical test should I take?"
 csv_name = "disease_database_mini.csv"
-FinalAnswer=csv_prompter(question,csv_name)
+FinalAnswer = csv_prompter(question, csv_name)
 print(FinalAnswer)
